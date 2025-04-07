@@ -1,15 +1,35 @@
 import os
+import logging
 from dotenv import load_dotenv
 import pandas as pd
 import requests
 import time
+
+
+# Logging settings
+LOG_FILE = 'app.log'
+LOG_LEVEL = logging.INFO
+
+# Make a directory for logs
+log_dir = os.path.dirname(LOG_FILE)
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+
+logging.basicConfig(
+    filename=LOG_FILE,
+    level=LOG_LEVEL,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%d-%m-%y %H:%M:%S',
+)
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
 API_TOKEN = os.getenv('API_TOKEN')
 
 if not API_TOKEN:
-    print('API_TOKEN is not found')
+    logger.error('API_TOKEN is not found')
     exit()
 
 
@@ -23,24 +43,25 @@ def get_debt_amount(number, api_token):
 
         if data['status'] == 200:
             if data['count'] > 0:
-                return float(data['records'][0]['sum'])  # Extract total debt amount
+                debt = float(data['records'][0]['sum'])
+                return debt  # Extract total debt amount
             else:
-                print(f'No debt found for number {number}')
+                logger.info(f'No debt found for number {number}. (Not in FSSP database)')
                 return 0
         else:
-            print(f'API returned a non-200 status for number {number}')
+            logger.warning(f'API returned a non-200 status for number {number}')
             return None
     except requests.exceptions.RequestException as e:
-        print(f'API request failed for number {number}: {e}')
+        logger.error(f'API request failed for number {number}: {e}')
         return None
     except KeyError as e:
-        print(f'KeyError: {e}. API response structure might have changed for number {number}')
+        logger.error(f'KeyError: {e}. API response structure might have changed for number {number}')
         return None
     except ValueError as e:
-        print(f'ValueError. Could not convert debt amount to float for number {number}: {e}')
+        logger.error(f'ValueError. Could not convert debt amount to float for number {number}: {e}')
         return None
     except Exception as e:
-        print(f'An unexpected error occurred for number {number}: {e}')
+        logger.exception(f'An unexpected error occurred for number {number}: {e}')
         return None
 
 
@@ -48,8 +69,11 @@ def get_debt_amount(number, api_token):
 numbers_file = os.getenv('PATH_TO_NUMBERS_FILE')
 try:
     df = pd.read_excel(numbers_file)
+    logger.info(f'File loaded successfully. Found {len(df)} numbers')
 except FileNotFoundError:
-    print('Error: Numbers file not found')
+    logger.error('Error: Numbers file not found')
+except Exception as e:
+    logger.exception(f'Error reading file {numbers_file}: {e}')
     exit()
 
 #Create a new column to store the debt amounts
@@ -71,6 +95,6 @@ for index, row in df.iterrows():
 path_for_new_file = os.getenv('PATH_FOR_NEW_FILE')
 try:
     df.to_excel(path_for_new_file, index=False)
-    print('Data saved to excel file')
+    logger.info(f'Data saved to {path_for_new_file}')
 except Exception as e:
-    print(f'Error saving to Excel file: {e}')
+    logger.exception(f'Error saving to Excel file: {e}')
