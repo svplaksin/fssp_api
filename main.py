@@ -1,37 +1,23 @@
 import json
 import os
-import logging
 from dotenv import load_dotenv
 import pandas as pd
 import requests
 import time
+from logging_config import setup_logging
 
 
-# Logging settings
-LOG_FILE = 'logs/app.log'
-LOG_LEVEL = logging.INFO
+# Set up logging
+logger = setup_logging()
 
-# Make a directory for logs
-log_dir = os.path.dirname(LOG_FILE)
-if not os.path.exists(log_dir):
-    os.makedirs(log_dir)
-
-logging.basicConfig(
-    filename=LOG_FILE,
-    level=LOG_LEVEL,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%d-%m-%y %H:%M:%S',
-)
-
-logger = logging.getLogger(__name__)
-
+# Load environment variables
 load_dotenv()
 
 API_TOKEN = os.getenv('API_TOKEN')
-
 if not API_TOKEN:
     logger.error('API_TOKEN is not found')
     exit()
+
 # Define the temporary files directory (relative to the current directory)
 TEMP_FILES_DIR = "temp_files"
 
@@ -44,7 +30,7 @@ def get_debt_amount(number, api_token):
     api_url = f'https://api-cloud.ru/api/fssp.php?type=ip&number={number}&token={api_token}'
     start_time = time.time()
     try:
-        response = requests.get(api_url, timeout=10)
+        response = requests.get(api_url, timeout=20)
         response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
         data = response.json()
         end_time = time.time()
@@ -96,7 +82,7 @@ if 'Debt Amount' not in df.columns:
     logger.info("Created new column 'Debt Amount'")
 
 # Set the interval for saving DataFrame
-SAVE_INTERVAL = 2 # Save every 20 requests
+SAVE_INTERVAL = 5# Save every 20 requests
 counter = 0
 
 # Prepare a list to store the rows for temporary saving
