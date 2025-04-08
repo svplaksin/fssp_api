@@ -114,14 +114,14 @@ for index, row in df.iterrows():
         if debt_amount is not None:
             df.loc[index, 'Debt Amount'] = debt_amount  # Update the DataFrame
             temp_data.append(df.loc[[index]]) # Add the row to the temp_data list
-            logger.info(f'Found and updated debt amount for index {index}: {debt_amount}')
+            logger.info(f'Found and updated debt amount for number {num} at index {index}: {debt_amount}')
             counter += 1 # Increment a counter ONLY when a new API request is made
         else:
             df.loc[index, 'Debt Amount'] = None  # Keep it None if Error occurred
             temp_data.append(df.loc[[index]])
             logger.info(f'No debt found for index {index}, setting to None')
 
-        time.sleep(3)  # Add a small delay to avoid overwhelming the API
+        time.sleep(0.5)  # Add a small delay to avoid overwhelming the API
 
     # Save temporary data every SAVE_INTERVAL API calls
     if counter % SAVE_INTERVAL == 0 and counter > 0:
@@ -141,7 +141,7 @@ for index, row in df.iterrows():
 
 # Save the final result after processing all rows
 try:
-    df.to_excel('numbers_with_debt.xlsx', index=True)
+    df.to_excel('numbers_with_debt.xlsx', index=False)
     logger.info(f'Data saved to numbers_with_debt.xlsx')
 except Exception as e:
     logger.exception(f'Error saving to Excel file: {e}')
