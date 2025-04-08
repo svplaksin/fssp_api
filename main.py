@@ -85,27 +85,41 @@ except Exception as e:
     logger.exception(f'Error reading file {numbers_file}: {e}')
     exit()
 
-#Create a new column to store the debt amounts
-df['Debt_Amount'] = None  # Initialize with None
+# Ensure the 'Debt Amount' column exists
+if 'Debt Amount' not in df.columns:
+    df['Debt Amount'] = None  # Initialize with None
+    logger.info("Created new column 'Debt Amount'")
 
 # Set the interval for saving DataFrame
 SAVE_INTERVAL = 20 # Save every 20 requests
 counter = 0
 
-#Iterate through the numbers in the first column and make API requests
+# Prepare a list to store the rows for temporary saving
+temp_data = []
+
+#Iterate through the Dataframe rows
 for index, row in df.iterrows():
     num = str(row.iloc[0])  # Get the number from the first column as a string
-    debt_amount = get_debt_amount(num, API_TOKEN)
+    existing_debt = row.iloc[1] # Second column: Existing debt amount
 
-    if debt_amount is not None:
-        df.loc[index, 'Debt_Amount'] = debt_amount  # Store the debt amount in the new column
-    else:
-        df.loc[index, 'Debt_Amount'] = None  # Keep it None id Error occurred
+    # Check if a debt amount already exists
+    if pd.isna(existing_debt): # Check if the value is NaN (missing)
+        debt_amount = get_debt_amount(num, API_TOKEN)
 
-    time.sleep(3)  # Add a small delay to avoid overwhelming the API
+        if debt_amount is not None:
+            df.loc[index, 'Debt Amount'] = debt_amount  # Update the DataFrame
+            temp_data.append(df.loc[[index]]) # Add the row to the temp_data list
+            logger.info(f'Found and updated debt amount for index {index}: {debt_amount}')
+            counter += 1 # Increment a counter ONLY when a new API request is made
+        else:
+            df.loc[index, 'Debt Amount'] = None  # Keep it None id Error occurred
+            temp_data.append(df.loc[[index]])
+            logger.info(f'No debt found for index {index}, setting to None')
 
-    counter += 1
-    if counter % SAVE_INTERVAL == 0:
+        time.sleep(3)  # Add a small delay to avoid overwhelming the API
+
+
+    if counter % SAVE_INTERVAL == 0 and counter > 0:
         try:
             filename = f'numbers_with_debt_temp_{counter}.xlsx'
             # Correctly construct the full path
@@ -114,8 +128,11 @@ for index, row in df.iterrows():
                 full_path = os.path.join(PATH_FOR_TEMP_FILE, filename)
             else:
                 full_path = filename # Save to current directory
-            df.to_excel(full_path, index=False)
-            logger.info(f'Exported {counter} rows to {full_path}')
+
+            temp_df = pd.concat(temp_data) # Create a DataFrame from the temp_data list
+            temp_df.to_excel(full_path, index=True)
+            logger.info(f'Data saved to {full_path} after processing {counter} API calls.')
+            temp_data = [] # Clear the temp_data for next save
         except Exception as e:
             logger.exception(f'Error saving to temporary Excel file: {e}')
 
