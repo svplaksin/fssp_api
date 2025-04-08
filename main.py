@@ -1,3 +1,4 @@
+import json
 import os
 import logging
 from dotenv import load_dotenv
@@ -7,7 +8,7 @@ import time
 
 
 # Logging settings
-LOG_FILE = 'app.log'
+LOG_FILE = 'logs/app.log'
 LOG_LEVEL = logging.INFO
 
 # Make a directory for logs
@@ -27,19 +28,20 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 API_TOKEN = os.getenv('API_TOKEN')
-PATH_FOR_TEMP_FILE = os.getenv('PATH_FOR_TEMP_FILE')
 
 if not API_TOKEN:
     logger.error('API_TOKEN is not found')
     exit()
+# Define the temporary files directory (relative to the current directory)
+TEMP_FILES_DIR = "temp_files"
 
-if not PATH_FOR_TEMP_FILE:
-    logger.warning('PATH_FOR_TEMP_FILE is not found. Temp files will be saved into current directory.')
-    PATH_FOR_TEMP_FILE = ''
+# Make sure the temporary files directory exists
+os.makedirs(TEMP_FILES_DIR, exist_ok=True)
+
 
 def get_debt_amount(number, api_token):
     # Makes an API request for a given number and extracts the total debt amount.
-    api_url = f'https://api-cloud.ru/api/fssp.php?type=ip&number={number}&api_token={api_token}'
+    api_url = f'https://api-cloud.ru/api/fssp.php?type=ip&number={number}&token={api_token}'
     start_time = time.time()
     try:
         response = requests.get(api_url, timeout=10)
@@ -60,6 +62,9 @@ def get_debt_amount(number, api_token):
         else:
             logger.warning(f'API returned a non-200 status for number {number}')
             return None
+    except json.decoder.JSONDecodeError as e:
+        logger.error(f'JSONDecodeError: Could not decode JSON response for number {number}')
+        return None
     except requests.exceptions.RequestException as e:
         logger.error(f'API request failed for number {number}: {e}')
         return None
@@ -75,14 +80,14 @@ def get_debt_amount(number, api_token):
 
 
 #Load the Excel file
-numbers_file = os.getenv('PATH_TO_NUMBERS_FILE')
 try:
-    df = pd.read_excel(numbers_file)
+    df = pd.read_excel('numbers.xlsx')
     logger.info(f'File loaded successfully. Found {len(df)} numbers')
 except FileNotFoundError:
     logger.error('Error: Numbers file not found')
+    exit()
 except Exception as e:
-    logger.exception(f'Error reading file {numbers_file}: {e}')
+    logger.exception(f'Error reading Excel file: {e}')
     exit()
 
 # Ensure the 'Debt Amount' column exists
@@ -91,7 +96,7 @@ if 'Debt Amount' not in df.columns:
     logger.info("Created new column 'Debt Amount'")
 
 # Set the interval for saving DataFrame
-SAVE_INTERVAL = 20 # Save every 20 requests
+SAVE_INTERVAL = 2 # Save every 20 requests
 counter = 0
 
 # Prepare a list to store the rows for temporary saving
@@ -99,7 +104,7 @@ temp_data = []
 
 #Iterate through the Dataframe rows
 for index, row in df.iterrows():
-    num = str(row.iloc[0])  # Get the number from the first column as a string
+    num = str(row.iloc[0])  # First column: Number
     existing_debt = row.iloc[1] # Second column: Existing debt amount
 
     # Check if a debt amount already exists
@@ -112,34 +117,31 @@ for index, row in df.iterrows():
             logger.info(f'Found and updated debt amount for index {index}: {debt_amount}')
             counter += 1 # Increment a counter ONLY when a new API request is made
         else:
-            df.loc[index, 'Debt Amount'] = None  # Keep it None id Error occurred
+            df.loc[index, 'Debt Amount'] = None  # Keep it None if Error occurred
             temp_data.append(df.loc[[index]])
             logger.info(f'No debt found for index {index}, setting to None')
 
         time.sleep(3)  # Add a small delay to avoid overwhelming the API
 
-
+    # Save temporary data every SAVE_INTERVAL API calls
     if counter % SAVE_INTERVAL == 0 and counter > 0:
         try:
             filename = f'numbers_with_debt_temp_{counter}.xlsx'
-            # Correctly construct the full path
-            if PATH_FOR_TEMP_FILE:
-                os.makedirs(PATH_FOR_TEMP_FILE, exist_ok=True)
-                full_path = os.path.join(PATH_FOR_TEMP_FILE, filename)
-            else:
-                full_path = filename # Save to current directory
+            # Create the full path to the temporary file
+            full_path = os.path.join(TEMP_FILES_DIR, filename)
 
             temp_df = pd.concat(temp_data) # Create a DataFrame from the temp_data list
             temp_df.to_excel(full_path, index=True)
+
             logger.info(f'Data saved to {full_path} after processing {counter} API calls.')
+
             temp_data = [] # Clear the temp_data for next save
         except Exception as e:
             logger.exception(f'Error saving to temporary Excel file: {e}')
 
-# Save the updated DataFrame to a new Excel file
-path_for_new_file = os.getenv('PATH_FOR_NEW_FILE')
+# Save the final result after processing all rows
 try:
-    df.to_excel(path_for_new_file, index=True)
-    logger.info(f'Data saved to {path_for_new_file}')
+    df.to_excel('numbers_with_debt.xlsx', index=True)
+    logger.info(f'Data saved to numbers_with_debt.xlsx')
 except Exception as e:
     logger.exception(f'Error saving to Excel file: {e}')
