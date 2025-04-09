@@ -1,6 +1,7 @@
-import requests
 import json
 import time
+
+import requests
 
 
 def get_debt_amount(number, api_token, logger):
@@ -16,17 +17,24 @@ def get_debt_amount(number, api_token, logger):
 
         logger.info(f'API request for number {number} took {elapsed_time:.2f} seconds')
 
+        if 'error' in data:
+            if data['error'] == '602':
+                logger.error(f'API access denied for number {number}. Message: {data["message"]}')
+                return 'TOKEN_NO_ACCESS'
+            elif data['error'] == '498':
+                logger.error(f'Not enough money on balance for number {number}. Message: {data["message"]}')
+                return 'TOKEN_NO_MONEY'
         if data['status'] == 200:
-            if data['count'] > 0:
+            if data['count'] == 1:
                 debt = float(data['records'][0]['sum'])
                 return debt  # Extract total debt amount
-            else:
+            elif data['count'] == 0:
                 logger.info(f'No debt found for number {number}. (Not in FSSP database)')
                 return 0
         else:
             logger.warning(f'API returned a non-200 status for number {number}')
             return None
-    except json.decoder.JSONDecodeError as e:
+    except json.decoder.JSONDecodeError:
         logger.error(f'JSONDecodeError: Could not decode JSON response for number {number}')
         return None
     except requests.exceptions.RequestException as e:

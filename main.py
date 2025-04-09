@@ -22,7 +22,7 @@ if not API_TOKEN:
     exit()
 
 # Constants
-TEMP_FILES_DIR = "temp_files" # # Define the temporary files directory (relative to the current directory)
+TEMP_FILES_DIR = "temp_files" # Define the temporary files directory (relative to the current directory)
 FINAL_FILE = 'numbers_with_debt.xlsx' # Name for the final file
 SAVE_INTERVAL = 20
 
@@ -64,6 +64,9 @@ try:
         if pd.isna(existing_debt): # Check if the value is NaN (missing)
             debt_amount = get_debt_amount(num, API_TOKEN, logger)
 
+            if debt_amount == 'TOKEN_NO_ACCESS' or debt_amount == 'TOKEN_NO_MONEY':
+                logger.error(f'Stopping processing due to API error: {debt_amount}')
+                break # Exit the loop, to proceed to the finally block
             if debt_amount is not None:
                 df.loc[index, 'Debt Amount'] = debt_amount  # Update the DataFrame
                 temp_data.append(df.loc[[index]]) # Add the row to the temp_data list
@@ -74,13 +77,14 @@ try:
                 temp_data.append(df.loc[[index]])
                 logger.info(f'No debt found for index {index}, setting to None')
         else:
-            logger.info(f'Debt amount already exists for number {num}. Skip API call')
-        time.sleep(0.5)  # Add a small delay to avoid overwhelming the API
+            logger.info(f'Debt amount already exists for number {num}. Skipping API call')
+        time.sleep(0.1)  # Add a small delay to avoid overwhelming the API
 
         # Save temporary data every SAVE_INTERVAL API calls
         if counter % SAVE_INTERVAL == 0 and counter > 0:
             save_temp_data(temp_data, counter, logger, TEMP_FILES_DIR)
             temp_data = [] # Reset temp_data after saving
+
 except Exception as e: # Catch any exception during processing
     logger.exception(f'Error occurred during processing: {e}')
 finally:
