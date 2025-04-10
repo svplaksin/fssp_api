@@ -5,6 +5,7 @@ import time
 
 import pandas as pd
 from dotenv import load_dotenv
+from tqdm import tqdm
 
 from api_client import get_debt_amount
 from logging_config import setup_logging
@@ -56,7 +57,7 @@ counter = 0
 temp_data = []
 #Iterate through the Dataframe rows
 try:
-    for index, row in df.iterrows():
+    for index, row in tqdm(df.iterrows(), total=len(df), desc='Processing...', unit='number'):
         num = str(row.iloc[0])  # First column: Number
         existing_debt = row.iloc[1] # Second column: Existing debt amount
 
