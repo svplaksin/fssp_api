@@ -9,7 +9,7 @@ def get_debt_amount(number, api_token, logger):
     api_url = f'https://api-cloud.ru/api/fssp.php?type=ip&number={number}&token={api_token}'
     start_time = time.time()
     try:
-        response = requests.get(api_url, timeout=20)
+        response = requests.get(api_url, timeout=60)
         response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
         data = response.json()
         end_time = time.time()
