@@ -19,8 +19,8 @@ load_dotenv()
 
 API_TOKEN = os.getenv('API_TOKEN')
 if not API_TOKEN:
-    logger.error('API_TOKEN is not found')
-    exit()
+    logger.error('API_TOKEN is not found. Please set the API_TOKEN environment variable.')
+    sys.exit(1)
 
 # Constants
 TEMP_FILES_DIR = "temp_files" # Define the temporary files directory (relative to the current directory)
