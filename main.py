@@ -8,6 +8,8 @@ import requests.exceptions
 from dotenv import load_dotenv
 from tqdm import tqdm
 
+from tenacity import retry, stop_after_attempt, wait_exponential
+
 from api_client import get_debt_amount
 from logging_config import setup_logging
 from utils import save_dataframe_to_excel, save_temp_data, signal_handler
@@ -43,6 +45,12 @@ signal.signal(signal.SIGINT,
                 frame: signal_handler(sig, frame, temp_data, counter, logger, TEMP_FILES_DIR)
               )
 
+# Retry logic for API calls
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10)) # Retry 3 times with exponential backoff
+def get_debt_amount_with_retry(number, api_token, logger, timeout):
+    """Wrapper for get_debt_amount with retry logic"""
+    return get_debt_amount(number, api_token, logger, timeout)
+
 #Load the Excel file
 try:
     df = pd.read_excel('numbers.xlsx')
@@ -68,7 +76,7 @@ try:
         # Check if a debt amount already exists
         if pd.isna(existing_debt): # Check if the value is NaN (missing)
             try:
-                debt_amount = get_debt_amount(num, API_TOKEN, logger, API_TIMEOUT)
+                debt_amount = get_debt_amount_with_retry(num, API_TOKEN, logger, API_TIMEOUT)
 
                 if debt_amount == 'TOKEN_NO_ACCESS' or debt_amount == 'TOKEN_NO_MONEY':
                     logger.error(f'Stopping processing due to API error: {debt_amount}')
