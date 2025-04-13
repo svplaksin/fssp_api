@@ -1,7 +1,9 @@
 import os
 import sys
+# from asyncio import timeout
 
 import pandas as pd
+import requests
 
 
 def save_dataframe_to_excel(df, filename, index=False, logger=None):
@@ -30,8 +32,8 @@ def save_temp_data(data, counter, logger, temp_files_dir):
         logger.exception(f"Error saving temporary file: {e}")
 
 
-def signal_handler(sig, frame, temp_data, counter, logger,temp_files_dir):
+def signal_handler_multiprocessing(sig, frame, temp_data, processed_data, counter, logger,temp_files_dir):
     logger.info('Received termination signal. Saving data...')
-    save_temp_data(temp_data, counter, logger, temp_files_dir)
+    save_temp_data(temp_data + processed_data, counter, logger, temp_files_dir)
     logger.info('Exiting...')
     sys.exit(0)

@@ -1,10 +1,11 @@
 import os
 import signal
 import sys
-import time
+import concurrent.futures
+from asyncio import timeout
 
 import pandas as pd
-import requests.exceptions
+import requests
 from dotenv import load_dotenv
 from tqdm import tqdm
 
@@ -12,7 +13,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from api_client import get_debt_amount
 from logging_config import setup_logging
-from utils import save_dataframe_to_excel, save_temp_data, signal_handler
+from utils import save_dataframe_to_excel, save_temp_data, signal_handler_multiprocessing
 
 # Set up logging
 logger = setup_logging()
@@ -28,9 +29,10 @@ if not API_TOKEN:
 # Constants
 TEMP_FILES_DIR = "temp_files" # Define the temporary files directory (relative to the current directory)
 FINAL_FILE = 'numbers_with_debt.xlsx' # Name for the final file
-SAVE_INTERVAL = 20
+SAVE_INTERVAL = 2
 API_TIMEOUT = 60
 API_DELAY = 0.1
+MAX_THREADS = 3
 
 # Make sure the temporary files directory exists
 os.makedirs(TEMP_FILES_DIR, exist_ok=True)
@@ -38,11 +40,12 @@ os.makedirs(TEMP_FILES_DIR, exist_ok=True)
 # Initialize variables before signal handler
 counter = 0
 temp_data = []
+processed_data = []
 
 # Signal handler
 signal.signal(signal.SIGINT,
               lambda sig,
-                frame: signal_handler(sig, frame, temp_data, counter, logger, TEMP_FILES_DIR)
+                frame: signal_handler_multiprocessing(sig, frame, temp_data, processed_data, counter, logger, TEMP_FILES_DIR)
               )
 
 # Retry logic for API calls
@@ -51,6 +54,34 @@ def get_debt_amount_with_retry(number, api_token, logger, timeout):
     """Wrapper for get_debt_amount with retry logic"""
     return get_debt_amount(number, api_token, logger, timeout)
 
+
+def process_row(index, row, API_TOKEN):
+    """Processes a single row of the DataFrame"""
+    num = str(row.iloc[0])
+    existing_debt = row.get('Debt Amount', pd.NA)
+
+    if pd.isna(existing_debt):
+        try:
+            debt_amount = get_debt_amount_with_retry(num, API_TOKEN, logger, API_TIMEOUT)
+
+            if debt_amount == 'TOKEN_NO_ACCESS' or debt_amount == 'TOKEN_NO_MONEY':
+                logger.error(f'Stopping processing due to API error: {debt_amount}')
+                return 'API_ERROR'
+            elif debt_amount is not None:
+                logger.info(f'Found and updated debt amount for number {num} at index {index}: {debt_amount}')
+                return {'index': index, 'number': num, 'debt_amount': debt_amount}
+            else:
+                logger.info(f'No debt found for number {num} at index {index}. Setting to None')
+                return {'index': index, 'number': num, 'debt_amount': None}
+        except requests.exceptions.RequestException as e:
+            logger.error(f'Network error during API call for number {num} at index {index}: {e}')
+            return {'index': index, 'number': num, 'debt_amount': None}
+        except Exception as e:
+            logger.error(f'Unexpected error during API call for number {num} at index {index}: {e}')
+            return {'index': index, 'number': num, 'debt_amount': None}
+    else:
+        logger.info(f'Debt amount already exists for number {num} at index {index}. Skipping API call')
+        return None
 #Load the Excel file
 try:
     df = pd.read_excel('numbers.xlsx')
@@ -67,53 +98,42 @@ if 'Debt Amount' not in df.columns:
     df['Debt Amount'] = pd.NA  # Initialize with pd.NA (missing values)
     logger.info("Created new column 'Debt Amount'")
 
-# Main processing
+# Main processing using multiprocessing
 try:
-    for index, row in tqdm(df.iterrows(), total=len(df), desc='Processing...', unit='number'):
-        num = str(row.iloc[0])  # First column: Number
-        existing_debt = row.iloc[1] # Second column: Existing debt amount
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
+        futures = {executor.submit(process_row, index, row, API_TOKEN): index for index, row in df.iterrows()}
 
-        # Check if a debt amount already exists
-        if pd.isna(existing_debt): # Check if the value is NaN (missing)
-            try:
-                debt_amount = get_debt_amount_with_retry(num, API_TOKEN, logger, API_TIMEOUT)
+        # Process results as they become available
+        for future in tqdm(concurrent.futures.as_completed(futures), total=len(df), desc='Processing...', unit='numbers'):
+            index = futures[future]
+            result = future.result()
 
-                if debt_amount == 'TOKEN_NO_ACCESS' or debt_amount == 'TOKEN_NO_MONEY':
-                    logger.error(f'Stopping processing due to API error: {debt_amount}')
-                    break # Exit the loop, to proceed to the finally block
-                elif debt_amount is not None:
-                    df.loc[index, 'Debt Amount'] = debt_amount  # Update the DataFrame
-                    temp_data.append({'index': index, 'number': num, 'debt_amount': debt_amount}) # Add the row to the temp_data list
-                    logger.info(f'Found and updated debt amount for number {num} at index {index}: {debt_amount}')
-                    counter += 1 # Increment a counter ONLY when a new API request is made
-                else:
-                    df.loc[index, 'Debt Amount'] = pd.NA  # Keep it None if Error occurred
-                    temp_data.append({'index': index, 'number': num, 'debt_amount': None})
-                    logger.info(f'No debt found for index {index}, setting to None')
-            except requests.exceptions.RequestException as e:
-                logger.error(f'Network error during API call: for number {num}: {e}')
-                df.loc[index, 'Debt Amount'] = pd.NA # Set to NA in case of error
-                temp_data.append({'index': index, 'number': num, 'debt_amount': None})
-            except Exception as e:
-                logger.exception(f'Unexpected error during API call: for number {num}: {e}')
-                df.loc[index, 'Debt Amount'] = pd.NA
-                temp_data.append({'index': index, 'number': num, 'debt_amount': None})
-
-        else:
-            logger.info(f'Debt amount already exists for number {num}. Skipping API call')
-
-        time.sleep(API_DELAY)  # Add a small delay to avoid overwhelming the API
-
-        # Save temporary data every SAVE_INTERVAL API calls
-        if counter % SAVE_INTERVAL == 0 and counter > 0:
-            save_temp_data(temp_data, counter, logger, TEMP_FILES_DIR)
-            temp_data = [] # Reset temp_data after saving
-
-except Exception as e: # Catch any exception during processing
+            if result == 'API_ERROR':
+                logger.error('Stopping processing due to API error')
+                break
+            if result:
+                processed_data.append(result)
+                counter += 1
+            if counter % SAVE_INTERVAL == 0 and counter != 0:
+                save_temp_data(temp_data + processed_data, counter, logger, TEMP_FILES_DIR)
+                temp_data = []
+                processed_data = []
+except Exception as e:
     logger.exception(f'Error occurred during processing: {e}')
 finally:
     logger.info('Saving before exiting...')
-    save_temp_data(temp_data, counter, logger, TEMP_FILES_DIR)
+    # Save any remaining data in temp_data
+    save_temp_data(temp_data + processed_data, counter, logger, TEMP_FILES_DIR)  # Save remaining data
+
+    print(f"DataFrame length before update: {len(df)}")  # Verify the df length
+
+    # Update the DataFrame with the processed data
+    for data in temp_data + processed_data:
+        if data and data['index'] in df.index:  # Check if data and index is valid
+            print(
+                f"Updating index: {data['index']}, Debt Amount: {data['debt_amount']}, Type: {type(data['debt_amount'])}")
+            df.loc[data['index'], 'Debt Amount'] = data['debt_amount']
+
     try:
         save_dataframe_to_excel(df, FINAL_FILE, index=False, logger=logger)
         logger.info(f'Final file saved into {FINAL_FILE}')
