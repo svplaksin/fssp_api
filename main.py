@@ -4,6 +4,7 @@ import sys
 import time
 
 import pandas as pd
+import requests.exceptions
 from dotenv import load_dotenv
 from tqdm import tqdm
 
@@ -50,7 +51,7 @@ except Exception as e:
 
 # Ensure the 'Debt Amount' column exists
 if 'Debt Amount' not in df.columns:
-    df['Debt Amount'] = None  # Initialize with None
+    df['Debt Amount'] = pd.NA  # Initialize with pd.NA (missing values)
     logger.info("Created new column 'Debt Amount'")
 
 # Main processing
@@ -64,22 +65,33 @@ try:
 
         # Check if a debt amount already exists
         if pd.isna(existing_debt): # Check if the value is NaN (missing)
-            debt_amount = get_debt_amount(num, API_TOKEN, logger)
+            try:
+                debt_amount = get_debt_amount(num, API_TOKEN, logger)
 
-            if debt_amount == 'TOKEN_NO_ACCESS' or debt_amount == 'TOKEN_NO_MONEY':
-                logger.error(f'Stopping processing due to API error: {debt_amount}')
-                break # Exit the loop, to proceed to the finally block
-            if debt_amount is not None:
-                df.loc[index, 'Debt Amount'] = debt_amount  # Update the DataFrame
-                temp_data.append(df.loc[[index]]) # Add the row to the temp_data list
-                logger.info(f'Found and updated debt amount for number {num} at index {index}: {debt_amount}')
-                counter += 1 # Increment a counter ONLY when a new API request is made
-            else:
-                df.loc[index, 'Debt Amount'] = None  # Keep it None if Error occurred
-                temp_data.append(df.loc[[index]])
-                logger.info(f'No debt found for index {index}, setting to None')
+                if debt_amount == 'TOKEN_NO_ACCESS' or debt_amount == 'TOKEN_NO_MONEY':
+                    logger.error(f'Stopping processing due to API error: {debt_amount}')
+                    break # Exit the loop, to proceed to the finally block
+                elif debt_amount is not None:
+                    df.loc[index, 'Debt Amount'] = debt_amount  # Update the DataFrame
+                    temp_data.append({'index': index, 'number': num, 'debt_amount': debt_amount}) # Add the row to the temp_data list
+                    logger.info(f'Found and updated debt amount for number {num} at index {index}: {debt_amount}')
+                    counter += 1 # Increment a counter ONLY when a new API request is made
+                else:
+                    df.loc[index, 'Debt Amount'] = pd.NA  # Keep it None if Error occurred
+                    temp_data.append({'index': index, 'number': num, 'debt_amount': None})
+                    logger.info(f'No debt found for index {index}, setting to None')
+            except requests.exceptions.RequestException as e:
+                logger.error(f'Network error during API call: for number {num}: {e}')
+                df.loc[index, 'Debt Amount'] = pd.NA # Set to NA in case of error
+                temp_data.append({'index': index, 'number': num, 'debt_amount': None})
+            except Exception as e:
+                logger.exception(f'Unexpected error during API call: for number {num}: {e}')
+                df.loc[index, 'Debt Amount'] = pd.NA
+                temp_data.append({'index': index, 'number': num, 'debt_amount': None})
+
         else:
             logger.info(f'Debt amount already exists for number {num}. Skipping API call')
+
         time.sleep(API_DELAY)  # Add a small delay to avoid overwhelming the API
 
         # Save temporary data every SAVE_INTERVAL API calls
