@@ -26,6 +26,7 @@ if not API_TOKEN:
 TEMP_FILES_DIR = "temp_files" # Define the temporary files directory (relative to the current directory)
 FINAL_FILE = 'numbers_with_debt.xlsx' # Name for the final file
 SAVE_INTERVAL = 20
+API_DELAY = 0.1
 
 # Make sure the temporary files directory exists
 os.makedirs(TEMP_FILES_DIR, exist_ok=True)
@@ -79,7 +80,7 @@ try:
                 logger.info(f'No debt found for index {index}, setting to None')
         else:
             logger.info(f'Debt amount already exists for number {num}. Skipping API call')
-        time.sleep(0.1)  # Add a small delay to avoid overwhelming the API
+        time.sleep(API_DELAY)  # Add a small delay to avoid overwhelming the API
 
         # Save temporary data every SAVE_INTERVAL API calls
         if counter % SAVE_INTERVAL == 0 and counter > 0:
