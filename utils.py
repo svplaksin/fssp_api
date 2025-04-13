@@ -21,7 +21,7 @@ def save_temp_data(data, counter, logger, temp_files_dir):
         if data:
             filename = f'numbers_with_debt_temp_{counter}.xlsx'
             full_path = os.path.join(temp_files_dir, filename)
-            temp_df = pd.concat(data)
+            temp_df = pd.DataFrame(data)
             save_dataframe_to_excel(temp_df, full_path, index=False, logger=logger)
             logger.info(f'Data saved to {full_path} after processing {counter} API calls')
         else:
