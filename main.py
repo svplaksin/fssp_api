@@ -27,6 +27,7 @@ if not API_TOKEN:
 TEMP_FILES_DIR = "temp_files" # Define the temporary files directory (relative to the current directory)
 FINAL_FILE = 'numbers_with_debt.xlsx' # Name for the final file
 SAVE_INTERVAL = 20
+API_TIMEOUT = 60
 API_DELAY = 0.1
 
 # Make sure the temporary files directory exists
@@ -67,7 +68,7 @@ try:
         # Check if a debt amount already exists
         if pd.isna(existing_debt): # Check if the value is NaN (missing)
             try:
-                debt_amount = get_debt_amount(num, API_TOKEN, logger)
+                debt_amount = get_debt_amount(num, API_TOKEN, logger, API_TIMEOUT)
 
                 if debt_amount == 'TOKEN_NO_ACCESS' or debt_amount == 'TOKEN_NO_MONEY':
                     logger.error(f'Stopping processing due to API error: {debt_amount}')

@@ -4,12 +4,12 @@ import time
 import requests
 
 
-def get_debt_amount(number, api_token, logger):
-    # Makes an API request for a given number and extracts the total debt amount.
+def get_debt_amount(number, api_token, logger, timeout=60):
+    """Makes an API request for a given number and extracts the total debt amount."""
     api_url = f'https://api-cloud.ru/api/fssp.php?type=ip&number={number}&token={api_token}'
     start_time = time.time()
     try:
-        response = requests.get(api_url, timeout=60)
+        response = requests.get(api_url, timeout=timeout)
         response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
         data = response.json()
         end_time = time.time()
