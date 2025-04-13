@@ -32,7 +32,11 @@ API_DELAY = 0.1
 # Make sure the temporary files directory exists
 os.makedirs(TEMP_FILES_DIR, exist_ok=True)
 
-# Обработчик сигнала
+# Initialize variables before signal handler
+counter = 0
+temp_data = []
+
+# Signal handler
 signal.signal(signal.SIGINT,
               lambda sig,
                 frame: signal_handler(sig, frame, temp_data, counter, logger, TEMP_FILES_DIR)
@@ -55,9 +59,6 @@ if 'Debt Amount' not in df.columns:
     logger.info("Created new column 'Debt Amount'")
 
 # Main processing
-counter = 0
-temp_data = []
-#Iterate through the Dataframe rows
 try:
     for index, row in tqdm(df.iterrows(), total=len(df), desc='Processing...', unit='number'):
         num = str(row.iloc[0])  # First column: Number
