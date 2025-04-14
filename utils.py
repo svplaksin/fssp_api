@@ -1,9 +1,10 @@
 import os
 import sys
-# from asyncio import timeout
 
 import pandas as pd
-import requests
+
+# from asyncio import timeout
+
 
 
 def save_dataframe_to_excel(df, filename, index=False, logger=None):
@@ -18,13 +19,13 @@ def save_dataframe_to_excel(df, filename, index=False, logger=None):
 
 
 def save_temp_data(data, counter, logger, temp_files_dir):
-    """Save data to temporary file"""
+    """Save data to temporary CSV file"""
     try:
         if data:
-            filename = f'numbers_with_debt_temp_{counter}.xlsx'
+            filename = f'numbers_with_debt_temp_{counter}.csv'
             full_path = os.path.join(temp_files_dir, filename)
             temp_df = pd.DataFrame(data)
-            save_dataframe_to_excel(temp_df, full_path, index=False, logger=logger)
+            temp_df.to_csv(full_path, index=False)
             logger.info(f'Data saved to {full_path} after processing {counter} API calls')
         else:
             logger.info('No data to save')

@@ -1,19 +1,18 @@
+import concurrent.futures
 import os
 import signal
 import sys
-import concurrent.futures
-from asyncio import timeout
 
 import pandas as pd
 import requests
 from dotenv import load_dotenv
-from tqdm import tqdm
-
 from tenacity import retry, stop_after_attempt, wait_exponential
+from tqdm import tqdm
 
 from api_client import get_debt_amount
 from logging_config import setup_logging
-from utils import save_dataframe_to_excel, save_temp_data, signal_handler_multiprocessing
+from utils import (save_dataframe_to_excel, save_temp_data,
+                   signal_handler_multiprocessing)
 
 # Set up logging
 logger = setup_logging()
@@ -29,10 +28,10 @@ if not API_TOKEN:
 # Constants
 TEMP_FILES_DIR = "temp_files" # Define the temporary files directory (relative to the current directory)
 FINAL_FILE = 'numbers_with_debt.xlsx' # Name for the final file
-SAVE_INTERVAL = 2
+SAVE_INTERVAL = 20
 API_TIMEOUT = 60
-API_DELAY = 0.1
-MAX_THREADS = 3
+API_DELAY = 0.3
+MAX_THREADS = 20
 
 # Make sure the temporary files directory exists
 os.makedirs(TEMP_FILES_DIR, exist_ok=True)
@@ -125,19 +124,29 @@ finally:
     # Save any remaining data in temp_data
     save_temp_data(temp_data + processed_data, counter, logger, TEMP_FILES_DIR)  # Save remaining data
 
-    print(f"DataFrame length before update: {len(df)}")  # Verify the df length
+    # Merge temp CSV files into final Excel
+    all_temp_files = [os.path.join(TEMP_FILES_DIR, f) for f in os.listdir(TEMP_FILES_DIR) if f.startswith('numbers_with_debt_temp_') and f.endswith('.csv')]
+    if all_temp_files:
+        try:
+            all_dfs = [pd.read_csv(f) for f in all_temp_files]
+            merged_df = pd.concat(all_dfs, ignore_index=True)
+            # Merge data on 'number' column
+            df['number'] = df['number'].astype(str)
+            merged_df['number'] = merged_df['number'].astype(str)
+            final_df = pd.merge(df, merged_df[['number', 'debt_amount']],on='number', how='left')
+            final_df['Debt Amount'] = final_df['debt_amount'].fillna(final_df['Debt Amount'])
+            final_df = final_df.drop('debt_amount', axis=1) # Drop the debt_amount column
 
-    # Update the DataFrame with the processed data
-    for data in temp_data + processed_data:
-        if data and data['index'] in df.index:  # Check if data and index is valid
-            print(
-                f"Updating index: {data['index']}, Debt Amount: {data['debt_amount']}, Type: {type(data['debt_amount'])}")
-            df.loc[data['index'], 'Debt Amount'] = data['debt_amount']
+            save_dataframe_to_excel(final_df, FINAL_FILE, index=False, logger=logger)
+            logger.info(f'Merged data from temporary files and saved to {FINAL_FILE}')
+            # --- OPTIONAL: Remove the temporary CSV files (cleanup) ---
+            # for temp_file in all_temp_files:
+            #     os.remove(temp_file)
+            #     logger.info('Removed temporary CSV files')
+        except Exception as e:
+            logger.exception(f'Error merging and saving temporary files: {e}')
+    else:
+        logger.warning('No temporary CSV files found to merge')
 
-    try:
-        save_dataframe_to_excel(df, FINAL_FILE, index=False, logger=logger)
-        logger.info(f'Final file saved into {FINAL_FILE}')
-    except Exception as e:
-        logger.exception(f'Error saving final Excel file: {e}')
     logger.info('Exiting...')
     sys.exit(0)
