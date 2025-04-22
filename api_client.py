@@ -2,8 +2,10 @@ import json
 import time
 
 import requests
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10)) # Retry 3 times with exponential backoff
 def get_debt_amount(number, api_token, logger, timeout=60):
     """Makes an API request for a given number and extracts the total debt amount."""
     api_url = f'https://api-cloud.ru/api/fssp.php?type=ip&number={number}&token={api_token}'

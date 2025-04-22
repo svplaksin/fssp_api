@@ -6,7 +6,6 @@ import sys
 import pandas as pd
 import requests
 from dotenv import load_dotenv
-from tenacity import retry, stop_after_attempt, wait_exponential
 from tqdm import tqdm
 
 from api_client import get_debt_amount
@@ -27,7 +26,7 @@ if not API_TOKEN:
 # Constants
 TEMP_FILES_DIR = "temp_files" # Define the temporary files directory (relative to the current directory)
 FINAL_FILE = 'numbers_with_debt.xlsx' # Name for the final file
-SAVE_INTERVAL = 20
+SAVE_INTERVAL = 10
 API_TIMEOUT = 60
 API_DELAY = 0.5
 MAX_THREADS = 20
@@ -53,13 +52,6 @@ def signal_handler_multiprocessing(sig, frame):
 
 signal.signal(signal.SIGINT, signal_handler_multiprocessing)
 
-# Retry logic for API calls
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10)) # Retry 3 times with exponential backoff
-def get_debt_amount_with_retry(number, api_token, logger, timeout):
-    """Wrapper for get_debt_amount with retry logic"""
-    return get_debt_amount(number, api_token, logger, timeout)
-
-
 def process_row(index, row, API_TOKEN):
     """Processes a single row of the DataFrame"""
     global stop_processing
@@ -72,7 +64,7 @@ def process_row(index, row, API_TOKEN):
 
     if pd.isna(existing_debt):
         try:
-            debt_amount = get_debt_amount_with_retry(num, API_TOKEN, logger, API_TIMEOUT)
+            debt_amount = get_debt_amount(num, API_TOKEN, logger, API_TIMEOUT)
 
             if debt_amount == 'TOKEN_NO_ACCESS' or debt_amount == 'TOKEN_NO_MONEY':
                 logger.error(f'Stopping processing due to API error: {debt_amount}')
