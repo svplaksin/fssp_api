@@ -4,13 +4,14 @@ import signal
 import sys
 
 import pandas as pd
-import requests
+# import requests
 from dotenv import load_dotenv
 from tqdm import tqdm
 
-from api_client import get_debt_amount
+# from api_client import get_debt_amount
 from logging_config import setup_logging
-from utils import save_dataframe_to_excel, save_temp_data
+from utils import save_dataframe_to_excel, save_temp_data, process_row, TEMP_FILES_DIR, MAX_THREADS, SAVE_INTERVAL, \
+    FINAL_FILE
 
 # Set up logging
 logger = setup_logging()
@@ -22,14 +23,6 @@ API_TOKEN = os.getenv('API_TOKEN')
 if not API_TOKEN:
     logger.error('API_TOKEN is not found. Please set the API_TOKEN environment variable.')
     sys.exit(1)
-
-# Constants
-TEMP_FILES_DIR = "temp_files" # Define the temporary files directory (relative to the current directory)
-FINAL_FILE = 'numbers_with_debt.xlsx' # Name for the final file
-SAVE_INTERVAL = 10
-API_TIMEOUT = 60
-API_DELAY = 0.5
-MAX_THREADS = 20
 
 # Make sure the temporary files directory exists
 os.makedirs(TEMP_FILES_DIR, exist_ok=True)
@@ -52,38 +45,6 @@ def signal_handler_multiprocessing(sig, frame):
 
 signal.signal(signal.SIGINT, signal_handler_multiprocessing)
 
-def process_row(index, row, API_TOKEN):
-    """Processes a single row of the DataFrame"""
-    global stop_processing
-    if stop_processing:
-        logger.info(f'process for index {index} interrupted.')
-        return None
-
-    num = str(row.iloc[0])
-    existing_debt = row.get('Debt Amount', pd.NA)
-
-    if pd.isna(existing_debt):
-        try:
-            debt_amount = get_debt_amount(num, API_TOKEN, logger, API_TIMEOUT)
-
-            if debt_amount == 'TOKEN_NO_ACCESS' or debt_amount == 'TOKEN_NO_MONEY':
-                logger.error(f'Stopping processing due to API error: {debt_amount}')
-                return 'API_ERROR'
-            elif debt_amount is not None:
-                logger.info(f'Found and updated debt amount for number {num} at index {index}: {debt_amount}')
-                return {'index': index, 'number': num, 'debt_amount': debt_amount}
-            else:
-                logger.info(f'No debt found for number {num} at index {index}. Setting to None')
-                return {'index': index, 'number': num, 'debt_amount': None}
-        except requests.exceptions.RequestException as e:
-            logger.error(f'Network error during API call for number {num} at index {index}: {e}')
-            return {'index': index, 'number': num, 'debt_amount': None}
-        except Exception as e:
-            logger.error(f'Unexpected error during API call for number {num} at index {index}: {e}')
-            return {'index': index, 'number': num, 'debt_amount': None}
-    else:
-        logger.info(f'Debt amount already exists for number {num} at index {index}. Skipping API call')
-        return None
 #Load the Excel file
 try:
     df = pd.read_excel('numbers.xlsx')
@@ -104,7 +65,7 @@ if 'Debt Amount' not in df.columns:
 try:
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
         # Prepare tasks for the thread pool
-        futures = {executor.submit(process_row, index, row, API_TOKEN): index for index, row in df.iterrows()}
+        futures = {executor.submit(process_row, index, row, API_TOKEN, logger, stop_processing): index for index, row in df.iterrows()}
 
         # Process results as they become available
         for future in tqdm(concurrent.futures.as_completed(futures), total=len(df), desc='Processing...', unit='number'):
