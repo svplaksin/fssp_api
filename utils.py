@@ -2,6 +2,7 @@ import concurrent.futures
 import logging
 import os
 import signal
+import sys
 from dataclasses import dataclass
 from typing import Optional, Union, List
 
@@ -141,6 +142,32 @@ def process_rows_concurrently(df, api_token, max_threads, save_interval, temp_di
     except Exception as e:
         logger.exception(f'Error occurred during processing: {e}')
         raise
+
+def load_input_data(file_path: str, logger: logging.Logger) -> pd.DataFrame:
+    """
+    Load and validate input Excel file with numbers
+    Returns:
+         pd.DataFrame: Loaded dataframe with 'Debt Amount' column
+    Raises:
+        SystemExit: If file cannot be loaded or is invalid
+    """
+    try:
+        df = pd.read_excel(file_path)
+        logger.info(f'File loaded successfully. Found {len(df)} numbers')
+
+        # Ensure required column exists
+        if 'Debt Amount' not in df.columns:
+            df['Debt Amount'] = pd.NA
+            logger.info('Created "Debt Amount" column for missing values')
+
+        return df
+
+    except FileNotFoundError:
+        logger.error(f'Input file not found: {file_path}')
+        sys.exit(1)
+    except Exception as e:
+        logger.exception(f'Error loading input file: {e}')
+        sys.exit(1)
 
 def merge_temp_files(temp_dir, original_df, final_path,logger):
     """

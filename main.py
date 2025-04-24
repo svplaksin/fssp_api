@@ -1,12 +1,11 @@
 import os
 import sys
 
-import pandas as pd
 from dotenv import load_dotenv
 
 from logging_config import setup_logging
 from utils import (FINAL_FILE, MAX_THREADS, SAVE_INTERVAL, TEMP_FILES_DIR,
-                   setup_signal_handler, merge_temp_files, process_rows_concurrently, save_temp_data)
+                   setup_signal_handler, merge_temp_files, process_rows_concurrently, save_temp_data, load_input_data)
 
 
 def main():
@@ -37,22 +36,8 @@ def main():
         logger=logger,
         temp_files_dir=TEMP_FILES_DIR,
     )
-    #Load the Excel file
-    try:
-        df = pd.read_excel('numbers.xlsx')
-        logger.info(f'File loaded successfully. Found {len(df)} numbers')
-    except FileNotFoundError:
-        logger.error('Error: Numbers file not found')
-        sys.exit(1)
-    except Exception as e:
-        logger.exception(f'Error reading Excel file: {e}')
-        sys.exit(1)
-
-    # Ensure the 'Debt Amount' column exists
-    if 'Debt Amount' not in df.columns:
-        df['Debt Amount'] = pd.NA  # Initialize with pd.NA (missing values)
-        logger.info("Created new column 'Debt Amount'")
-
+    #Load and validate input data
+    df = load_input_data('numbers.xlsx', logger)
     # Main processing using multiprocessing
     try:
         processed_data, counter, stop_processing = process_rows_concurrently(
