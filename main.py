@@ -4,10 +4,17 @@ import sys
 from dotenv import load_dotenv
 
 from logging_config import setup_logging
-from utils import (FINAL_FILE, MAX_THREADS, SAVE_INTERVAL, TEMP_FILES_DIR,
-                   load_input_data, merge_temp_files,
-                   process_rows_concurrently, save_temp_data,
-                   setup_signal_handler)
+from utils import (
+    FINAL_FILE,
+    MAX_THREADS,
+    SAVE_INTERVAL,
+    TEMP_FILES_DIR,
+    load_input_data,
+    merge_temp_files,
+    process_rows_concurrently,
+    save_temp_data,
+    setup_signal_handler,
+)
 
 
 def main():
@@ -15,10 +22,12 @@ def main():
     logger = setup_logging()
     load_dotenv()
 
-    #Configuration
-    API_TOKEN = os.getenv('API_TOKEN')
-    if not API_TOKEN:
-        logger.error('API_TOKEN is not found. Please set the API_TOKEN environment variable.')
+    # Configuration
+    api_token = os.getenv("API_TOKEN")
+    if not api_token:
+        logger.error(
+            "API_TOKEN is not found. Please set the API_TOKEN environment variable."
+        )
         sys.exit(1)
 
     # Make sure the temporary files directory exists
@@ -40,18 +49,18 @@ def main():
     df = None
     # Data pipeline
     try:
-        df = load_input_data('numbers.xlsx', logger)
+        df = load_input_data("numbers.xlsx", logger)
         processed_data, counter = process_rows_concurrently(
             df=df,
-            api_token=API_TOKEN,
+            api_token=api_token,
             max_threads=MAX_THREADS,
             save_interval=SAVE_INTERVAL,
             temp_dir=TEMP_FILES_DIR,
-            logger=logger
+            logger=logger,
         )
 
     finally:
-        logger.info('Saving before exiting...')
+        logger.info("Saving before exiting...")
         save_temp_data(processed_data, counter, logger, TEMP_FILES_DIR)
 
         # Merge temp files
@@ -59,11 +68,12 @@ def main():
             temp_dir=TEMP_FILES_DIR,
             original_df=df,
             final_path=FINAL_FILE,
-            logger=logger
+            logger=logger,
         )
 
-        logger.info('Exiting...')
+        logger.info("Exiting...")
         sys.exit(0)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
