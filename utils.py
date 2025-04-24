@@ -116,7 +116,8 @@ def process_row(
 
     if not pd.isna(existing_debt):
         logger.info(
-            f"Debt amount already exists for number {num} at index {index}. Skipping API call"
+            f"Debt amount already exists for"
+            f"number {num} at index {index}. Skipping API call"
         )
         return None
 
@@ -130,7 +131,8 @@ def process_row(
             # return 'API_ERROR'
 
         logger.info(
-            f"Found and updated debt amount for number {num} at index {index}: {debt_amount}"
+            f"Found and updated debt amount"
+            f"for number {num} at index {index}: {debt_amount}"
         )
         return ProcessResult(index, num, debt_amount)
     except requests.exceptions.RequestException as e:
