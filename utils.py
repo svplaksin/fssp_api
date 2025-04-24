@@ -1,11 +1,13 @@
 import concurrent.futures
+import logging
 import os
+import signal
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional, Union, List
 
 import pandas as pd
 import requests
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from api_client import get_debt_amount
 
@@ -16,6 +18,23 @@ SAVE_INTERVAL = 10
 API_TIMEOUT = 60
 API_DELAY = 0.5
 MAX_THREADS = 20
+stop_processing = False
+
+# Signal handler
+def setup_signal_handler(temp_data: List, processed_data: List, counter: int,
+                         logger: logging.Logger, temp_files_dir: str) -> None:
+    """
+        Configures the signal handler for graceful shutdown.
+        Must be called after variables are initialized but before processing starts.
+    """
+    def signal_handler(sig, frame):
+        global stop_processing
+        stop_processing = True
+        logger.info('Received termination signal. Saving data...')
+        save_temp_data(temp_data + processed_data, counter, logger, temp_files_dir)
+        logger.info('Exiting...')
+
+    signal.signal(signal.SIGINT, signal_handler)
 
 def save_dataframe_to_excel(df, filename, index=False, logger=None):
     try:
@@ -53,7 +72,7 @@ def process_row(index: int,
                 row:pd.Series,
                 api_token: str,
                 logger,
-                stop_processing: bool = False
+                # stop_processing: bool = False
             ) -> Union[ProcessResult, None]:
     """Processes a single row of the DataFrame"""
     if stop_processing:
@@ -82,21 +101,21 @@ def process_row(index: int,
         logger.error(f'Network error during API call for number {num} at index {index}: {e}')
         return ProcessResult(index, num, None, 'UNKNOWN_ERROR')
 
-def process_rows_concurrently(df, api_token, max_threads, save_interval, temp_dir, logger):
+def process_rows_concurrently(df, api_token, max_threads, save_interval, temp_dir, logger, stop_processing=False):
     """
     Process DataFrame rows concurrently using ThreadPoolExecutor
     Returns: (processed_data, counter, stop_processing_flag)
     """
     processed_data = []
     counter = 0
-    stop_processing = False
 
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
-            futures = {executor.submit(process_row, index,row, api_token, logger, stop_processing): index
+            futures = {executor.submit(process_row, index,row, api_token, logger): index
                        for index, row in df.iterrows()}
             for future in tqdm(concurrent.futures.as_completed(futures),
-                               total=len(df), desc='Processing...',
+                               total=len(df),
+                               desc='Processing...',
                                unit='number'):
                 if stop_processing:
                     logger.info('Exiting from the process loop...')
