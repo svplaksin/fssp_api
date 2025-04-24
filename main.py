@@ -5,17 +5,17 @@ from dotenv import load_dotenv
 
 from logging_config import setup_logging
 from utils import (FINAL_FILE, MAX_THREADS, SAVE_INTERVAL, TEMP_FILES_DIR,
-                   setup_signal_handler, merge_temp_files, process_rows_concurrently, save_temp_data, load_input_data)
+                   load_input_data, merge_temp_files,
+                   process_rows_concurrently, save_temp_data,
+                   setup_signal_handler)
 
 
 def main():
-
     # Set up logging
     logger = setup_logging()
-
-    # Load environment variables
     load_dotenv()
 
+    #Configuration
     API_TOKEN = os.getenv('API_TOKEN')
     if not API_TOKEN:
         logger.error('API_TOKEN is not found. Please set the API_TOKEN environment variable.')
@@ -36,11 +36,12 @@ def main():
         logger=logger,
         temp_files_dir=TEMP_FILES_DIR,
     )
-    #Load and validate input data
-    df = load_input_data('numbers.xlsx', logger)
-    # Main processing using multiprocessing
+
+    df = None
+    # Data pipeline
     try:
-        processed_data, counter, stop_processing = process_rows_concurrently(
+        df = load_input_data('numbers.xlsx', logger)
+        processed_data, counter = process_rows_concurrently(
             df=df,
             api_token=API_TOKEN,
             max_threads=MAX_THREADS,
@@ -50,7 +51,6 @@ def main():
         )
 
     finally:
-        # Final cleanup and saving
         logger.info('Saving before exiting...')
         save_temp_data(processed_data, counter, logger, TEMP_FILES_DIR)
 

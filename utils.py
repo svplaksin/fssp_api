@@ -3,8 +3,9 @@ import logging
 import os
 import signal
 import sys
+import threading
 from dataclasses import dataclass
-from typing import Optional, Union, List
+from typing import List, Optional, Union
 
 import pandas as pd
 import requests
@@ -19,7 +20,9 @@ SAVE_INTERVAL = 10
 API_TIMEOUT = 60
 API_DELAY = 0.5
 MAX_THREADS = 20
-stop_processing = False
+
+# Thread safe stop flag
+stop_event = threading.Event()
 
 # Signal handler
 def setup_signal_handler(temp_data: List, processed_data: List, counter: int,
@@ -29,8 +32,7 @@ def setup_signal_handler(temp_data: List, processed_data: List, counter: int,
         Must be called after variables are initialized but before processing starts.
     """
     def signal_handler(sig, frame):
-        global stop_processing
-        stop_processing = True
+        stop_event.set()
         logger.info('Received termination signal. Saving data...')
         save_temp_data(temp_data + processed_data, counter, logger, temp_files_dir)
         logger.info('Exiting...')
@@ -46,7 +48,6 @@ def save_dataframe_to_excel(df, filename, index=False, logger=None):
         if logger:
             logger.exception(f'Error saving to Excel file: {e}')
         raise e
-
 
 def save_temp_data(data, counter, logger, temp_files_dir):
     """Save data to temporary CSV file"""
@@ -69,14 +70,9 @@ class ProcessResult:
     debt_amount: Optional[float]
     error: Optional[str] = None
 
-def process_row(index: int,
-                row:pd.Series,
-                api_token: str,
-                logger,
-                # stop_processing: bool = False
-            ) -> Union[ProcessResult, None]:
+def process_row(index: int, row:pd.Series, api_token: str, logger) -> Union[ProcessResult, None]:
     """Processes a single row of the DataFrame"""
-    if stop_processing:
+    if stop_event.is_set():
         logger.info(f'process for index {index} interrupted.')
         return None
 
@@ -86,12 +82,15 @@ def process_row(index: int,
     if not pd.isna(existing_debt):
         logger.info(f'Debt amount already exists for number {num} at index {index}. Skipping API call')
         return None
+
     try:
         debt_amount = get_debt_amount(num, api_token, logger, API_TIMEOUT)
 
         if debt_amount in ('TOKEN_NO_ACCESS', 'TOKEN_NO_MONEY'):
             logger.error(f'Stopping processing due to API error: {debt_amount}')
+            stop_event.set()
             return ProcessResult(index, num, debt_amount, None)
+            # return 'API_ERROR'
 
         logger.info(f'Found and updated debt amount for number {num} at index {index}: {debt_amount}')
         return ProcessResult(index, num, debt_amount)
@@ -102,10 +101,10 @@ def process_row(index: int,
         logger.error(f'Network error during API call for number {num} at index {index}: {e}')
         return ProcessResult(index, num, None, 'UNKNOWN_ERROR')
 
-def process_rows_concurrently(df, api_token, max_threads, save_interval, temp_dir, logger, stop_processing=False):
+def process_rows_concurrently(df, api_token, max_threads, save_interval, temp_dir, logger):
     """
     Process DataFrame rows concurrently using ThreadPoolExecutor
-    Returns: (processed_data, counter, stop_processing_flag)
+    Returns: (processed_data, counter)
     """
     processed_data = []
     counter = 0
@@ -118,7 +117,7 @@ def process_rows_concurrently(df, api_token, max_threads, save_interval, temp_di
                                total=len(df),
                                desc='Processing...',
                                unit='number'):
-                if stop_processing:
+                if stop_event.is_set():
                     logger.info('Exiting from the process loop...')
                     break
 
@@ -127,7 +126,6 @@ def process_rows_concurrently(df, api_token, max_threads, save_interval, temp_di
 
                 if result == 'API_ERROR':
                     logger.error('Stopping processing due to API error')
-                    stop_processing = True
                     break
 
                 if result:
@@ -138,7 +136,7 @@ def process_rows_concurrently(df, api_token, max_threads, save_interval, temp_di
                     save_temp_data(processed_data.copy(), counter, logger, temp_dir)
                     processed_data.clear()
 
-        return processed_data, counter, stop_processing
+        return processed_data, counter
     except Exception as e:
         logger.exception(f'Error occurred during processing: {e}')
         raise
@@ -170,21 +168,19 @@ def load_input_data(file_path: str, logger: logging.Logger) -> pd.DataFrame:
         sys.exit(1)
 
 def merge_temp_files(temp_dir, original_df, final_path,logger):
-    """
-    Merge all temporary files into final Excel file
-    """
+    """Merge all temporary files into final Excel file"""
     try:
-
         all_temp_files = [os.path.join(temp_dir, f)
                           for f in os.listdir(temp_dir)
                           if f.startswith('numbers_with_debt_temp_') and f.endswith('.csv')]
+
         if not all_temp_files:
             logger.warning('No temporary CSV files found to merge')
             return None
 
         all_dfs = [pd.read_csv(temp) for temp in all_temp_files]
-
         merged_df = pd.concat(all_dfs, ignore_index=True)
+
         original_df['number'] = original_df['number'].astype(str)
         merged_df['number'] = merged_df['number'].astype(str)
 
