@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "debt-checker"
+version = "1.0.0"
+description = "API client for checking debts through FSSP API"
+authors = [{name = "Your Name", email = "your@email.com"}]
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+
+dependencies = [
+    "requests>=2.25.0",
+    "tenacity>=8.0.1",
+    "pandas>=1.3.0",
+    "python-dotenv>=0.19.0",
+    "tqdm>=4.62.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.1.0",
+    "pytest>=7.0.0",
+    "mypy>=0.910",
+]
+
+
+[tool.setuptools]
+packages = ["debt_checker"]
+
+[project.scripts]
+debt-checker = "debt_checker.main:main"
+
+[tool.ruff]
+# Main configuration
+line-length = 88
+fix = true
+
+# Formatting configuration
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 88
+line-ending = "auto"
+quote-style = "double"
+skip-magic-trailing-comma = false
+
+# Lint configuration
+[tool.ruff.lint]
+# Enabled rules (avoid incompatible pairs)
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C",   # flake8-comprehensions
+    "N",   # pep8-naming
+    "D",   # pydocstyle (only compatible rules)
+    "S",   # flake8-bandit
+    "A",   # flake8-builtins
+    "Q",   # flake8-quotes
+    "UP",  # pyupgrade
+    "RUF", # Ruff-specific
+]
+
+# Disable incompatible pydocstyle rules
+ignore = [
+    "D203", # blank line before class (conflicts with D211)
+    "D213", # multi-line summary second line (conflicts with D212)
+]
+
+# Exclude files/directories
+exclude = [
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".venv",
+    "build",
+    "dist",
+]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-v --cov=."
+testpaths = ["tests"]
+python_files = "test_*.py"
