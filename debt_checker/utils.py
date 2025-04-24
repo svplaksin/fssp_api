@@ -13,7 +13,7 @@ import pandas as pd
 import requests
 from tqdm.auto import tqdm
 
-from api_client import get_debt_amount
+from debt_checker.api_client import get_debt_amount
 
 # Constants
 TEMP_FILES_DIR = "temp_files"  # Define the temporary files directory

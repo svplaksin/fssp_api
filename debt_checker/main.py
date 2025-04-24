@@ -5,8 +5,8 @@ import sys
 
 from dotenv import load_dotenv
 
-from logging_config import setup_logging
-from utils import (
+from debt_checker.logging_config import setup_logging
+from debt_checker.utils import (
     FINAL_FILE,
     MAX_THREADS,
     SAVE_INTERVAL,

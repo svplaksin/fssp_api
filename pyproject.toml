@@ -26,8 +26,12 @@ dev = [
     "mypy>=0.910",
 ]
 
+
+[tool.setuptools]
+packages = ["debt_checker"]
+
 [project.scripts]
-debt-checker = "main:main"
+debt-checker = "debt_checker.main:main"
 
 [tool.ruff]
 # Main configuration
