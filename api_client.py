@@ -1,4 +1,7 @@
+"""API client module for interacting with FSSP debt checking service."""
+
 import json
+import logging
 import time
 
 import requests
@@ -8,8 +11,32 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 @retry(
     stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10)
 )  # Retry 3 times with exponential backoff
-def get_debt_amount(number, api_token, logger, timeout=60):
-    """Makes an API request for a given number and extracts the total debt amount."""
+def get_debt_amount(number: str, api_token: str, logger: logging.Logger, timeout: int = 60):
+    """Fetch debt amount for a given enforcement procedure number (ITN) from FSSP API.
+
+    Args:
+        number: Enforcement procedure number as string
+        api_token: Authentication token for API access
+        logger: Configured logger instance for error tracking
+        timeout: Request timeout in seconds (default: 60)
+
+    Returns:
+        Union[float, str, None]:
+            - float: Debt amount if found (0.0 means no debt)
+            - 'TOKEN_NO_ACCESS' if API access denied
+            - 'TOKEN_NO_MONEY' if account balance insufficient
+            - None for any other errors
+
+    Raises:
+        requests.exceptions.RequestException: On network-related errors
+        ValueError: If debt amount cannot be converted to float
+
+    Example:
+        >>> debt = get_debt_amount('1234/56/7890-ИП', 'your_api_token', logger)
+        >>> if isinstance(debt, float):
+        ...     print(f"Debt amount: {debt}")
+
+    """
     api_url = (
         f"https://api-cloud.ru/api/fssp.php?type=ip&number={number}&token={api_token}"
     )

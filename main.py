@@ -1,3 +1,5 @@
+"""Main execution module for debt checker application."""
+
 import os
 import sys
 
@@ -18,7 +20,22 @@ from utils import (
 
 
 def main():
-    # Set up logging
+    """Orchestrate the debt checking workflow.
+
+    Workflow:
+        1. Load environment configuration
+        2. Setup logging and signal handling
+        3. Load input data
+        4. Process records concurrently
+        5. Save final results
+
+    Environment Variables:
+        API_TOKEN: Required authentication token
+
+    Exit Codes:
+        0: Success
+        1: Error
+    """
     logger = setup_logging()
     load_dotenv()
 

@@ -1,3 +1,5 @@
+"""Core utilities for debt processing and data handling."""
+
 import concurrent.futures
 import logging
 import os
@@ -46,37 +48,38 @@ def setup_signal_handler(
 
     signal.signal(signal.SIGINT, signal_handler)
 
+def load_input_data(file_path: str, logger: logging.Logger) -> pd.DataFrame:
+    """Load and validate input Excel file with numbers.
 
-def save_dataframe_to_excel(df, filename, index=False, logger=None):
+    Returns:
+         pd.DataFrame: Loaded dataframe with 'Debt Amount' column
+    Raises:
+        SystemExit: If file cannot be loaded or is invalid.
+
+    """
     try:
-        df.to_excel(filename, index=index)
-        if logger:
-            logger.info(f"Data saved to {filename}")
-    except Exception as e:
-        if logger:
-            logger.exception(f"Error saving to Excel file: {e}")
-        raise e
+        df = pd.read_excel(file_path)
+        logger.info(f"File loaded successfully. Found {len(df)} numbers")
 
+        # Ensure required column exists
+        if "Debt Amount" not in df.columns:
+            df["Debt Amount"] = pd.NA
+            logger.info('Created "Debt Amount" column for missing values')
 
-def save_temp_data(data, counter, logger, temp_files_dir):
-    """Save data to temporary CSV file."""
-    try:
-        if data:
-            filename = f"numbers_with_debt_temp_{counter}.csv"
-            full_path = os.path.join(temp_files_dir, filename)
-            temp_df = pd.DataFrame(data)
-            temp_df.to_csv(full_path, index=False)
-            logger.info(
-                f"Data saved to {full_path} after processing {counter} API calls"
-            )
-        else:
-            logger.info("No data to save")
+        return df
+
+    except FileNotFoundError:
+        logger.error(f"Input file not found: {file_path}")
+        sys.exit(1)
     except Exception as e:
-        logger.exception(f"Error saving temporary file: {e}")
+        logger.exception(f"Error loading input file: {e}")
+        sys.exit(1)
 
 
 @dataclass
 class ProcessResult:
+    """Stores debt check results for a single enforcement number."""
+
     index: int
     number: str
     debt_amount: Optional[float]
@@ -86,7 +89,24 @@ class ProcessResult:
 def process_row(
     index: int, row: pd.Series, api_token: str, logger
 ) -> Union[ProcessResult, None]:
-    """Process a single row of the DataFrame."""
+    """Process single row of enforcement numbers data and check for debts.
+
+    Args:
+        index: Row index from source DataFrame
+        row: Pandas Series containing enforcement numbers data
+        api_token: API authentication token
+        logger: Configured logger instance
+
+    Returns:
+        Union[ProcessResult, str, None]:
+            - ProcessResult: Contains debt data if processed
+            - 'API_ERROR': For token/auth failures
+            - None: If skipped (existing data) or interrupted
+
+    Note:
+        Uses global stop_event for graceful interruption handling
+
+    """
     if stop_event.is_set():
         logger.info(f"process for index {index} interrupted.")
         return None
@@ -128,9 +148,24 @@ def process_row(
 def process_rows_concurrently(
     df, api_token, max_threads, save_interval, temp_dir, logger
 ):
-    """Process DataFrame rows concurrently using ThreadPoolExecutor.
+    """Process DataFrame rows concurrently with ThreadPoolExecutor.
 
-    Returns: (processed_data, counter)
+    Args:
+        df: Input DataFrame containing enforcement numbers
+        api_token: API authentication token
+        max_threads: Maximum worker threads to use
+        save_interval: Save progress every N records
+        temp_dir: Directory for temporary data saves
+        logger: Configured logger instance
+
+    Returns:
+        tuple: (processed_data, counter)
+            processed_data: List of ProcessResult objects
+            counter: Total records processed
+
+    Note:
+        Implements periodic saving and graceful interruption handling
+
     """
     processed_data = []
     counter = 0
@@ -172,32 +207,21 @@ def process_rows_concurrently(
         raise
 
 
-def load_input_data(file_path: str, logger: logging.Logger) -> pd.DataFrame:
-    """Load and validate input Excel file with numbers.
-
-    Returns:
-         pd.DataFrame: Loaded dataframe with 'Debt Amount' column
-    Raises:
-        SystemExit: If file cannot be loaded or is invalid.
-
-    """
+def save_temp_data(data, counter, logger, temp_files_dir):
+    """Save data to temporary CSV file."""
     try:
-        df = pd.read_excel(file_path)
-        logger.info(f"File loaded successfully. Found {len(df)} numbers")
-
-        # Ensure required column exists
-        if "Debt Amount" not in df.columns:
-            df["Debt Amount"] = pd.NA
-            logger.info('Created "Debt Amount" column for missing values')
-
-        return df
-
-    except FileNotFoundError:
-        logger.error(f"Input file not found: {file_path}")
-        sys.exit(1)
+        if data:
+            filename = f"numbers_with_debt_temp_{counter}.csv"
+            full_path = os.path.join(temp_files_dir, filename)
+            temp_df = pd.DataFrame(data)
+            temp_df.to_csv(full_path, index=False)
+            logger.info(
+                f"Data saved to {full_path} after processing {counter} API calls"
+            )
+        else:
+            logger.info("No data to save")
     except Exception as e:
-        logger.exception(f"Error loading input file: {e}")
-        sys.exit(1)
+        logger.exception(f"Error saving temporary file: {e}")
 
 
 def merge_temp_files(temp_dir, original_df, final_path, logger):
@@ -233,3 +257,23 @@ def merge_temp_files(temp_dir, original_df, final_path, logger):
     except Exception as e:
         logger.exception(f"Error occurred during merging temporary files: {e}")
         raise
+
+
+def save_dataframe_to_excel(df, filename, index=False, logger=None):
+    """Save DataFrame to Excel file with error logging.
+
+    Args:
+        df: Data to save
+        filename: Output path
+        index: Write row index if True
+        logger: Optional logger instance
+
+    """
+    try:
+        df.to_excel(filename, index=index)
+        if logger:
+            logger.info(f"Data saved to {filename}")
+    except Exception as e:
+        if logger:
+            logger.exception(f"Error saving to Excel file: {e}")
+        raise e
