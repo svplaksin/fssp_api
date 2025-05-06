@@ -7,6 +7,7 @@ import signal
 import sys
 import threading
 from dataclasses import dataclass
+from datetime import datetime
 from typing import List, Optional, Union
 
 import pandas as pd
@@ -17,7 +18,7 @@ from debt_checker.api_client import get_debt_amount
 
 # Constants
 TEMP_FILES_DIR = "temp_files"  # Define the temporary files directory
-FINAL_FILE = "numbers_with_debt.xlsx"  # Name for the final file
+FINAL_FILE = f"numbers_with_debt_{datetime.now().strftime('%H%M%S')}.xlsx"  # Name for the final file
 SAVE_INTERVAL = 10
 API_TIMEOUT = 60
 API_DELAY = 0.5
