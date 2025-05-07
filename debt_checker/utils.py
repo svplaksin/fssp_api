@@ -132,7 +132,7 @@ def process_row(
             # return 'API_ERROR'
 
         logger.info(
-            f"Found and updated debt amount"
+            f"Found and updated debt amount "
             f"for number {num} at index {index}: {debt_amount}"
         )
         return ProcessResult(index, num, debt_amount)
