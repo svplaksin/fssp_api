@@ -4,7 +4,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Code Style: Ruff](https://img.shields.io/badge/Code%20Style-Ruff-red.svg)](https://github.com/astral-sh/ruff)
 
-
 ## 🚀 Key Features & Technical Highlights
 
 ✅ **High-Performance API Client**  
