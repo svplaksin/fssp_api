@@ -20,7 +20,7 @@ from debt_checker.api_client import get_debt_amount
 TEMP_FILES_DIR = "temp_files"  # Define the temporary files directory
 FINAL_FILE = f"numbers_with_debt_{datetime.now().strftime('%H%M%S')}.xlsx"  # Name for the final file
 SAVE_INTERVAL = 10
-API_TIMEOUT = 60
+API_TIMEOUT = 400
 API_DELAY = 0.5
 MAX_THREADS = 20
 
@@ -228,7 +228,7 @@ def save_temp_data(data, counter, logger, temp_files_dir):
 
 
 def merge_temp_files(temp_dir, original_df, final_path, logger):
-    """Merge all temporary files into final Excel file."""
+    """Merge all temporary files into final Excel file while preserving original order and existing debts."""
     try:
         all_temp_files = [
             os.path.join(temp_dir, f)
@@ -240,25 +240,39 @@ def merge_temp_files(temp_dir, original_df, final_path, logger):
             logger.warning("No temporary CSV files found to merge")
             return None
 
+        # Read and merge all temp files
         all_dfs = [pd.read_csv(temp) for temp in all_temp_files]
         merged_df = pd.concat(all_dfs, ignore_index=True)
 
+        # Ensure consistent data types
         original_df["number"] = original_df["number"].astype(str)
         merged_df["number"] = merged_df["number"].astype(str)
 
-        final_df = pd.merge(original_df, merged_df, on="number", how="left")
-        final_df["Debt Amount"] = final_df["debt_amount"].fillna(
-            final_df["Debt Amount"]
-        )
-        final_df = final_df.drop(
-            columns=[col for col in final_df if col not in ("number", "Debt Amount")]
+        # CRITICAL FIX: Proper deduplication - keep first non-NA value
+        merged_df = merged_df.sort_values('debt_amount', na_position='last')
+        merged_df = merged_df.drop_duplicates('number', keep='first')
+
+        # Preserve original order
+        original_df = original_df.reset_index().rename(columns={"index": "original_index"})
+
+        # Efficiently update only NA values using mapping
+        debt_mapping = merged_df.set_index('number')['debt_amount'].to_dict()
+        mask = original_df['Debt Amount'].isna()
+        original_df.loc[mask, 'Debt Amount'] = original_df.loc[mask, 'number'].map(debt_mapping)
+
+        # Prepare final output
+        final_df = (
+            original_df
+            .sort_values("original_index")
+            .drop(columns=["original_index"])
+            [["number", "Debt Amount"]]
         )
 
         save_dataframe_to_excel(final_df, final_path, index=False, logger=logger)
-        logger.info(f"Merged data from temporary files and saved to {final_path}")
+        logger.info(f"Merged data saved to {final_path}")
         return final_df
     except Exception as e:
-        logger.exception(f"Error occurred during merging temporary files: {e}")
+        logger.exception(f"Merging failed: {e}")
         raise
 
 
