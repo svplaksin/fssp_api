@@ -1,4 +1,4 @@
-# 🔍 FSSP Debt Checker - Automated Debt Verification System
+# 🔍 Debt Checker - Automated Debt Verification System
 
 [![Python 3.8+](https://img.shields.io/badge/Python-3.8+-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
