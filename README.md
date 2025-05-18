@@ -1,6 +1,6 @@
 # 🔍 Debt Checker - Automated Debt Verification System
 
-[![Python 3.8+](https://img.shields.io/badge/Python-3.8+-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.8+-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Code Style: Ruff](https://img.shields.io/badge/Code%20Style-Ruff-red.svg)](https://github.com/astral-sh/ruff)
 
@@ -29,7 +29,7 @@
 
 | Component          | Technology Used              | Why It Matters               |
 |--------------------|------------------------------|------------------------------|
-| **Core Logic**     | Python 3.8+                  | Maintainable, typed code     |
+| **Core Logic**     | Python 3.11+                 | Maintainable, typed code     |
 | **Concurrency**    | concurrent.futures           | 10-20x faster than sequential|
 | **API Client**     | requests                     | Resilient network operations |
 | **Data Processing**| pandas                       | Professional Excel output    |
