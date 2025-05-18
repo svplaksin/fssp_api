@@ -1,4 +1,7 @@
-numbers.xlsx
+/temp_files
+*.xlsx
+clean_numbers.py
+save_df.py
 .idea
 
 # Byte-compiled / optimized / DLL files
