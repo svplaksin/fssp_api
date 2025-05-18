@@ -8,7 +8,7 @@ version = "1.0.0"
 description = "API client for checking debts through FSSP API"
 authors = [{name = "svplaksin", email = "sv-plaksin@yandex.ru"}]
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 license = {text = "MIT"}
 
 dependencies = [
